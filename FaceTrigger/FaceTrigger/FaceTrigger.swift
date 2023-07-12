@@ -9,135 +9,176 @@
 import UIKit
 import ARKit
 
-@objc public protocol FaceTriggerDelegate: ARSCNViewDelegate {
-    
-    @objc optional func onSmile()
-    @objc optional func onSmileDidChange(smiling: Bool)
-    
-    @objc optional func onBlink()
-    @objc optional func onBlinkDidChange(blinking: Bool)
-    
-    @objc optional func onBlinkLeft()
-    @objc optional func onBlinkLeftDidChange(blinkingLeft: Bool)
-    
-    @objc optional func onBlinkRight()
-    @objc optional func onBlinkRightDidChange(blinkingRight: Bool)
-    
-    @objc optional func onCheekPuff()
-    @objc optional func onCheekPuffDidChange(cheekPuffing: Bool)
-    
-    @objc optional func onMouthPucker()
-    @objc optional func onMouthPuckerDidChange(mouthPuckering: Bool)
-    
-    @objc optional func onJawOpen()
-    @objc optional func onJawOpenDidChange(jawOpening: Bool)
-    
-    @objc optional func onJawLeft()
-    @objc optional func onJawLeftDidChange(jawLefting: Bool)
-    
-    @objc optional func onJawRight()
-    @objc optional func onJawRightDidChange(jawRighting: Bool)
-    
-    @objc optional func onBrowDown()
-    @objc optional func onBrowDownDidChange(browDown: Bool)
-    
-    @objc optional func onBrowUp()
-    @objc optional func onBrowUpDidChange(browUp: Bool)
-    
-    @objc optional func onSquint()
-    @objc optional func onSquintDidChange(squinting: Bool)
+
+protocol FaceTriggerEvaluatorProtocol {
+    func evaluate(_ blendShapes: [ARFaceAnchor.BlendShapeLocation: NSNumber], forDelegate delegate: FaceTriggerDelegate)
 }
 
-public class FaceTrigger: NSObject, ARSCNViewDelegate {
-    
-    private var sceneView: ARSCNView?
-    private let sceneViewSessionOptions: ARSession.RunOptions = [.resetTracking, .removeExistingAnchors]
-    private let hostView: UIView
-    private let delegate: FaceTriggerDelegate
-    private var evaluators = [FaceTriggerEvaluatorProtocol]()
-    
-    public var smileThreshold: Float = 0.7
-    public var blinkThreshold: Float = 0.8
-    public var browDownThreshold: Float = 0.25
-    public var browUpThreshold: Float = 0.95
-    public var cheekPuffThreshold: Float = 0.2
-    public var mouthPuckerThreshold: Float = 0.7
-    public var jawOpenThreshold: Float = 0.9
-    public var jawLeftThreshold: Float = 0.3
-    public var jawRightThreshold: Float = 0.3
-    public var squintThreshold: Float = 0.8
-    
-    public var hidePreview: Bool = false
-    
-    public init(hostView: UIView, delegate: FaceTriggerDelegate) {
-        
-        self.hostView = hostView
-        self.delegate = delegate
+class SmileEvaluator: FaceTriggerEvaluatorProtocol {
+    private var oldValue = false
+    private let threshold: Float
+
+    init(threshold: Float) {
+        self.threshold = threshold
     }
-    
-    static public var isSupported: Bool {
-        return ARFaceTrackingConfiguration.isSupported
-    }
-    
-    public func start() {
-        
-        guard FaceTrigger.isSupported else {
-            NSLog("FaceTrigger is not supported.")
-            return
-        }
-        
-        // evaluators
-        evaluators.append(SmileEvaluator(threshold: smileThreshold))
-        evaluators.append(BlinkEvaluator(threshold: blinkThreshold))
-        evaluators.append(BrowDownEvaluator(threshold: browDownThreshold))
-        evaluators.append(BrowUpEvaluator(threshold: browUpThreshold))
-        evaluators.append(CheekPuffEvaluator(threshold: cheekPuffThreshold))
-        evaluators.append(MouthPuckerEvaluator(threshold: mouthPuckerThreshold))
-        evaluators.append(JawOpenEvaluator(threshold: jawOpenThreshold))
-        evaluators.append(JawLeftEvaluator(threshold: jawLeftThreshold))
-        evaluators.append(JawRightEvaluator(threshold: jawRightThreshold))
-        evaluators.append(SquintEvaluator(threshold: squintThreshold))
-        
-        // ARSCNView
-        let configuration = ARFaceTrackingConfiguration()
-        configuration.isLightEstimationEnabled = true
-        
-        sceneView = ARSCNView(frame: hostView.bounds)
-        sceneView!.automaticallyUpdatesLighting = true
-        sceneView!.session.run(configuration, options: sceneViewSessionOptions)
-        sceneView!.isHidden = hidePreview
-        sceneView!.delegate = self
-        
-        hostView.addSubview(sceneView!)
-    }
-    
-    public func stop() {
-        
-        pause()
-        sceneView?.removeFromSuperview()
-    }
-    
-    public func pause() {
-        
-        sceneView?.session.pause()
-    }
-    
-    public func unpause() {
-        
-        if let configuration = sceneView?.session.configuration {
-            sceneView?.session.run(configuration, options: sceneViewSessionOptions)
+
+    func evaluate(_ blendShapes: [ARFaceAnchor.BlendShapeLocation: NSNumber], forDelegate delegate: FaceTriggerDelegate) {
+        if let mouthSmileLeft = blendShapes[.mouthSmileLeft], let mouthSmileRight = blendShapes[.mouthSmileRight] {
+            let newValue = ((mouthSmileLeft.floatValue + mouthSmileRight.floatValue) / 2.0) >= threshold
+            if newValue != oldValue {
+                delegate.onSmileDidChange?(smiling: newValue)
+                if newValue {
+                    delegate.onSmile?()
+                }
+            }
+            oldValue = newValue
         }
     }
-    
-    public func renderer(_ renderer: SCNSceneRenderer, didUpdate node: SCNNode, for anchor: ARAnchor) {
-        
-        guard let faceAnchor = anchor as? ARFaceAnchor else {
-            return
+}
+
+class BlinkEvaluator: BothEvaluator {
+    override func onBoth(delegate: FaceTriggerDelegate, newBoth: Bool) {
+        delegate.onBlinkDidChange?(blinking: newBoth)
+        if newBoth {
+            delegate.onBlink?()
         }
-        
-        let blendShapes = faceAnchor.blendShapes
-        evaluators.forEach {
-            $0.evaluate(blendShapes, forDelegate: delegate)
+    }
+
+    override func onLeft(delegate: FaceTriggerDelegate, newLeft: Bool) {
+        delegate.onBlinkLeftDidChange?(blinkingLeft: newLeft)
+        if newLeft {
+            delegate.onBlinkLeft?()
+        }
+    }
+
+    override func onRight(delegate: FaceTriggerDelegate, newRight: Bool) {
+        delegate.onBlinkRightDidChange?(blinkingRight: newRight)
+        if newRight {
+            delegate.onBlinkRight?()
+        }
+    }
+
+    init(threshold: Float) {
+        super.init(threshold: threshold, leftKey: .eyeBlinkLeft, rightKey: .eyeBlinkRight)
+    }
+}
+
+class BrowDownEvaluator: BothEvaluator {
+    override func onBoth(delegate: FaceTriggerDelegate, newBoth: Bool) {
+        delegate.onBrowDownDidChange?(browDown: newBoth)
+        if newBoth {
+            delegate.onBrowDown?()
+        }
+    }
+
+    init(threshold: Float) {
+        super.init(threshold: threshold, leftKey: .browDownLeft, rightKey: .browDownRight)
+    }
+}
+
+class BrowUpEvaluator: FaceTriggerEvaluatorProtocol {
+    private var oldValue = false
+    private let threshold: Float
+
+    init(threshold: Float) {
+        self.threshold = threshold
+    }
+
+    func evaluate(_ blendShapes: [ARFaceAnchor.BlendShapeLocation: NSNumber], forDelegate delegate: FaceTriggerDelegate) {
+        if let browInnerUp = blendShapes[.browInnerUp] {
+            let newValue = browInnerUp.floatValue >= threshold
+            if newValue != oldValue {
+                delegate.onBrowUpDidChange?(browUp: newValue)
+                if newValue {
+                    delegate.onBrowUp?()
+                }
+            }
+            oldValue = newValue
+        }
+    }
+}
+
+class SquintEvaluator: BothEvaluator {
+    override func onBoth(delegate: FaceTriggerDelegate, newBoth: Bool) {
+        delegate.onSquintDidChange?(squinting: newBoth)
+        if newBoth {
+            delegate.onSquint?()
+        }
+    }
+
+    init(threshold: Float) {
+        super.init(threshold: threshold, leftKey: .eyeSquintLeft, rightKey: .eyeSquintRight)
+    }
+}
+
+class BothEvaluator: FaceTriggerEvaluatorProtocol {
+    private let threshold: Float
+    private let leftKey: ARFaceAnchor.BlendShapeLocation
+    private let rightKey: ARFaceAnchor.BlendShapeLocation
+
+    init(threshold: Float, leftKey: ARFaceAnchor.BlendShapeLocation, rightKey: ARFaceAnchor.BlendShapeLocation) {
+        self.threshold = threshold
+        self.leftKey = leftKey
+        self.rightKey = rightKey
+    }
+
+    func evaluate(_ blendShapes: [ARFaceAnchor.BlendShapeLocation: NSNumber], forDelegate delegate: FaceTriggerDelegate) {
+        let left = blendShapes[leftKey]
+        let right = blendShapes[rightKey]
+
+        var newLeft = false
+        if let left = left {
+            newLeft = left.floatValue >= threshold
+        }
+
+        var newRight = false
+        if let right = right {
+            newRight = right.floatValue >= threshold
+        }
+
+        let newBoth = newLeft && newRight
+        if newBoth {
+            onBoth(delegate: delegate, newBoth: newBoth)
+        } else {
+            if newLeft {
+                onLeft(delegate: delegate, newLeft: newLeft)
+            } else if newRight {
+                onRight(delegate: delegate, newRight: newRight)
+            }
+        }
+    }
+
+    func onBoth(delegate: FaceTriggerDelegate, newBoth: Bool) {
+        // Subclasses should override this method
+    }
+
+    func onLeft(delegate: FaceTriggerDelegate, newLeft: Bool) {
+        // Subclasses should override this method
+    }
+
+    func onRight(delegate: FaceTriggerDelegate, newRight: Bool) {
+        // Subclasses should override this method
+    }
+}
+
+class MouthPuckerEvaluator: FaceTriggerEvaluatorProtocol {
+    private var oldValue = false
+    private let threshold: Float
+
+    init(threshold: Float) {
+        self.threshold = threshold
+    }
+
+    func evaluate(_ blendShapes: [ARFaceAnchor.BlendShapeLocation: NSNumber], forDelegate delegate: FaceTriggerDelegate) {
+        if let mouthPucker = blendShapes[.mouthPucker] {
+            let newValue = mouthPucker.floatValue >= threshold
+            if newValue != oldValue {
+                delegate.onMouthPuckerDidChange?(mouthPuckering: newValue)
+                if newValue {
+                    delegate.onMouthPucker?()
+                }
+            }
+            oldValue = newValue
         }
     }
 }
