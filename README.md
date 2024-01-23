@@ -1,6 +1,6 @@
 FaceTrigger
 ===================
-# (This fork is only to update the package to work on current iOS environment) I am not sure whether I will work on making it 100% fully functional, since I only needed the blink and the smile, Howwever If I have free time, I will work more on it!
+# (This fork is only to update the package to work on current iOS environment) I am not sure whether I will work on making it 100% fully functional, since I only needed the blink and the smile, However If I have free time, I will work more on it!
 
 [![Build Status](https://travis-ci.org/barnaclejive/FaceTrigger.svg?branch=master)](https://travis-ci.org/barnaclejive/FaceTrigger)
 [![Cocoapods Compatible](https://img.shields.io/cocoapods/v/FaceTrigger.svg)](https://img.shields.io/cocoapods/v/FaceTrigger.svg)
